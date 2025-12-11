@@ -575,6 +575,7 @@ int parse_file(const char* filename) {
         while (lookahead.type != TOKEN_EOF) advance_token();
     }
     
+    
     free_lexer(lexer);
     lexer = NULL;
     
