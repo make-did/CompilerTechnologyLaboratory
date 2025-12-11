@@ -1,3 +1,5 @@
+//词法分析器运行主函数
+
 #include "lexer.h"
 #include <stdio.h>
 #include <stdlib.h>
