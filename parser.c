@@ -1,46 +1,99 @@
-#include"parser.h"
-#include<stdio.h>
-#include<stdlib.h>
-#include<stdbool.h>
-#include<string.h>
+#include "parser.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <string.h>
 
-//NOTE -  全局解析器状态
+// NOTE - 全局解析器状态
 static Lexer* lexer = NULL;
 static Token lookahead;
 static bool parse_error = false;
 
-//NOTE - 用于打印步骤的相关信息
-static int indent_level = 0;
-static void indent_inc(void){
-    indent_level++;
-}
-static void indent_dec(void){
-    if(indent_level>0) indent_level--;
-}
-static void print_indent(void){
-    for(int i =0;i<indent_level;i++)
-    putchar(' ');
-}
-static void trace_enter(const char* name) {
-    print_indent(); 
-    printf("Enter: %s\n", name);
-    indent_inc();
-}
-static void trace_exit(const char* name) {
-    indent_dec();
-    print_indent(); 
-    printf("Exit : %s\n", name);
-}
-static void trace_match(TokenType t, const char* lexeme) {
-    print_indent(); 
-    printf("Match: %s -> '%s'\n", token_type_to_str(t), lexeme);
-}
-static void trace_token(const char* note, Token t) {
-    print_indent(); 
-    printf("%s: %s ('%s') at %d:%d\n", note, token_type_to_str(t.type), t.lexeme, t.line, t.column);
+// NOTE - 用于记录推导过程的二维数组
+#define MAX_STEPS 200
+#define MAX_STEP_LEN 256
+static char steps[MAX_STEPS][MAX_STEP_LEN];
+static int step_count = 0;
+static int current_depth = 0;
+
+// 记录当前推导状态
+static char current_derivation[MAX_STEP_LEN] = "program";
+
+// 保存当前步骤
+static void save_step(void) {
+    if (step_count < MAX_STEPS) {
+        // 添加适当的缩进来显示推导层级
+        char formatted_step[MAX_STEP_LEN];
+        int indent = current_depth * 2;
+        
+        // 创建带缩进的步骤
+        int i;
+        for (i = 0; i < indent && i < MAX_STEP_LEN-1; i++) {
+            formatted_step[i] = ' ';
+        }
+        formatted_step[i] = '\0';
+        
+        // 添加推导式
+        strcat(formatted_step, current_derivation);
+        strcpy(steps[step_count], formatted_step);
+        step_count++;
+    }
 }
 
-//NOTE - 前向声明，非终结符对应一个函数
+// 替换推导式中的非终结符
+static void replace_nonterminal(const char* nonterm, const char* replacement) {
+    char temp[MAX_STEP_LEN] = "";
+    char* pos = strstr(current_derivation, nonterm);
+    
+    if (pos) {
+        // 复制前半部分
+        int len = pos - current_derivation;
+        strncpy(temp, current_derivation, len);
+        temp[len] = '\0';
+        
+        // 添加替换字符串
+        strcat(temp, replacement);
+        
+        // 添加后半部分
+        strcat(temp, pos + strlen(nonterm));
+        
+        // 更新当前推导
+        strcpy(current_derivation, temp);
+        
+        // 保存步骤
+        save_step();
+    }
+}
+
+// 匹配并替换终结符
+static void match_and_replace(TokenType expected, const char* term_name) {
+    if (lookahead.type == expected) {
+        // 在推导式中替换终结符
+        char* pos = strstr(current_derivation, term_name);
+        if (pos) {
+            char temp[MAX_STEP_LEN];
+            strncpy(temp, current_derivation, pos - current_derivation);
+            temp[pos - current_derivation] = '\0';
+            strcat(temp, lookahead.lexeme);
+            strcat(temp, pos + strlen(term_name));
+            strcpy(current_derivation, temp);
+            save_step();
+        }
+        
+        // 前进到下一个token
+        lookahead = get_token(lexer);
+    } else {
+        fprintf(stderr, "Syntax error at line %d, col %d: expected %s but found %s ('%s')\n",
+                lookahead.line, lookahead.column,
+                token_type_to_str(expected),
+                token_type_to_str(lookahead.type),
+                lookahead.lexeme);
+        parse_error = true;
+    }
+}
+
+// 前向声明
 static void advance_token(void);
 static void match(TokenType expected);
 static void sync_on(TokenType set[], int set_len);
@@ -65,163 +118,210 @@ static void factor(void);
 static void bool_expr(void);
 static void bool_rest(void);
 
-
-//TODO - 想后扫描
-static void advance_token(void){
+// TODO - 词法单元前进
+static void advance_token(void) {
     lookahead = get_token(lexer);
 }
-//TODO - 判断是否与期望字符一致
-static void match(TokenType expected){
-    if(lookahead.type == expected){
-        trace_match(lookahead.type,lookahead.lexeme);
+
+// TODO - 匹配期望的词法单元（简单版本，不输出推导）
+static void match(TokenType expected) {
+    if (lookahead.type == expected) {
         advance_token();
-    }else{
-        print_indent();
+    } else {
         fprintf(stderr, "Syntax error at line %d, col %d: expected %s but found %s ('%s')\n",
                 lookahead.line, lookahead.column,
                 token_type_to_str(expected),
                 token_type_to_str(lookahead.type),
                 lookahead.lexeme);
         parse_error = true;
-        TokenType syncset[] = {TOKEN_SEMICOLON,TOKEN_RBRACE,TOKEN_EOF};
-        sync_on(syncset,sizeof(syncset)/sizeof(syncset[0]));
-        if(lookahead.type != TOKEN_EOF)
-            advance_token();
     }
 }
-//TODO - 同步：跳转到set中的token或EOF。
-static void sync_on(TokenType set[],int set_len){
+
+// TODO - 同步恢复
+static void sync_on(TokenType set[], int set_len) {
     bool found = false;
-    while(lookahead.type != TOKEN_EOF){
-        for(int i = 0;i<set_len;i++){
-            if(lookahead.type = set[i]){
+    while (lookahead.type != TOKEN_EOF) {
+        for (int i = 0; i < set_len; i++) {
+            if (lookahead.type == set[i]) {
                 found = true;
                 break;
             }
         }
-        if(found) break;
+        if (found) break;
         advance_token();
     }
 }
-//TODO - 判断给定的是否为数字
-static bool is_number_token(TokenType t){
-    return t == TOKEN_INTEGER||t == TOKEN_FLOAT_NUM||t == TOKEN_HEX||t == TOKEN_OCTAL;
-}
 
-//NOTE - 以下为语法函数的实现：
+// NOTE - 以下为语法函数的实现：
 
-//TODO - program->block
-static void program(void){
-    trace_enter("program");
+// TODO - program -> block
+static void program(void) {
+    // 保存初始状态
+    save_step();
+    
+    current_depth++;
+    replace_nonterminal("program", "block");
+    
     block();
-    if(lookahead.type != TOKEN_EOF){
-        print_indent();
+    
+    current_depth--;
+    
+    if (lookahead.type != TOKEN_EOF) {
         fprintf(stderr, "Warning: extra tokens after program end at line %d\n", lookahead.line);
     }
 }
-//TODO - block -> '{' stmts '}'
-static void block(void){
-    trace_enter("block");
-    if(lookahead.type == TOKEN_LBRACE){
+
+// TODO - block -> '{' stmts '}'
+static void block(void) {
+    current_depth++;
+    replace_nonterminal("block", "{ stmts }");
+    
+    if (lookahead.type == TOKEN_LBRACE) {
         match(TOKEN_LBRACE);
         stmts();
         match(TOKEN_RBRACE);
-    }else{
-        print_indent();
+    } else {
         fprintf(stderr, "Syntax error: expected '{' at line %d\n", lookahead.line);
         parse_error = true;
-        TokenType syncset[] = {TOKEN_RBRACE,TOKEN_EOF};
-        sync_on(syncset,sizeof(syncset)/sizeof(syncset[0]));
-        if(lookahead.type == TOKEN_RBRACE) advance_token();
     }
-    trace_exit("block");
+    
+    current_depth--;
 }
-//TODO - stmts -> stmt stmts | ε
-static void stmts(void){
-    trace_enter("stmts");
-    for(;;){
-        if (lookahead.type == TOKEN_IDENTIFIER ||
-            lookahead.type == TOKEN_IF ||
-            lookahead.type == TOKEN_WHILE ||
-            lookahead.type == TOKEN_DO ||
-            lookahead.type == TOKEN_BREAK ||
-            lookahead.type == TOKEN_LBRACE){
-                stmt();
+
+// TODO - stmts -> stmt stmts | ε
+static void stmts(void) {
+    // 检查是否应该应用 ε 产生式
+    if (lookahead.type == TOKEN_RBRACE) {
+        // ε 产生式，直接删除 stmts
+        char* pos = strstr(current_derivation, "stmts");
+        if (pos) {
+            // 删除 stmts（包括前面的空格）
+            char temp[MAX_STEP_LEN];
+            char* start = pos;
+            
+            // 向前找空格
+            while (start > current_derivation && *(start-1) == ' ') {
+                start--;
             }
-        else{
-            print_indent();
-            printf("stmts -> epsilon\n");
-            break;
-        }    
+            
+            strncpy(temp, current_derivation, start - current_derivation);
+            temp[start - current_derivation] = '\0';
+            strcat(temp, pos + 5); // 5是"stmts"的长度
+            
+            strcpy(current_derivation, temp);
+            save_step();
+        }
+        return;
     }
-    trace_exit("stmts");
+    
+    current_depth++;
+    replace_nonterminal("stmts", "stmt stmts");
+    
+    stmt();
+    stmts();
+    
+    current_depth--;
 }
-//TODO - stmt -> id = expr ; | if ( bool ) stmt [ else stmt ] | while ( bool ) stmt | do stmt while ( bool ) ; | break ; | block
-static void stmt(void){
-    trace_enter("stmt");
-    if(lookahead.type == TOKEN_IDENTIFIER){
+
+// TODO - stmt -> id = expr ; | if ( bool ) stmt [ else stmt ] | while ( bool ) stmt | do stmt while ( bool ) ; | break ; | block
+static void stmt(void) {
+    if (lookahead.type == TOKEN_IDENTIFIER) {
         assignment_stmt();
-    }else if(lookahead.type == TOKEN_IF){
+    } else if (lookahead.type == TOKEN_IF) {
         if_stmt();
-    }else if(lookahead.type == TOKEN_WHILE){
+    } else if (lookahead.type == TOKEN_WHILE) {
         while_stmt();
-    }else if(lookahead.type == TOKEN_DO){
+    } else if (lookahead.type == TOKEN_DO) {
         do_while_stmt();
-    }else if(lookahead.type == TOKEN_BREAK){
+    } else if (lookahead.type == TOKEN_BREAK) {
         break_stmt();
-    }else if(lookahead.type == TOKEN_LBRACE){
+    } else if (lookahead.type == TOKEN_LBRACE) {
         block();
-    }else{
-        print_indent();
+    } else {
         fprintf(stderr, "Syntax error: unexpected token %s ('%s') at line %d in stmt\n",
                 token_type_to_str(lookahead.type), lookahead.lexeme, lookahead.line);
         parse_error = true;
-        TokenType syncset[] = { TOKEN_SEMICOLON, TOKEN_RBRACE, TOKEN_EOF };
-        sync_on(syncset, sizeof(syncset)/sizeof(syncset[0]));
-        if (lookahead.type != TOKEN_EOF) advance_token();
     }
-    trace_exit("stmt");
 }
-//TODO - assignment_stmt -> id = expr ;
-static void assignment_stmt(void){
-    trace_enter("assignment_stmt");
-    trace_token("LHS identifier",lookahead);
-    match(TOKEN_IDENTIFIER);
+
+// TODO - assignment_stmt -> id = expr ;
+static void assignment_stmt(void) {
+    current_depth++;
+    replace_nonterminal("stmt", "id = expr ;");
+    
+    // 匹配标识符
+    match_and_replace(TOKEN_IDENTIFIER, "id");
+    
+    // 匹配赋值符号
     match(TOKEN_ASSIGN);
+    
+    // 处理表达式
     expr();
+    
+    // 匹配分号
     match(TOKEN_SEMICOLON);
-    trace_exit("assignment_stmt");
+    
+    current_depth--;
 }
-//TODO - if_stmt -> if '(' bool ')' stmt [ else stmt ]
-static void if_stmt(void){
-    trace_enter("if_stmt");
-    match(TOKEN_IF);
-    match(TOKEN_LPAREN);
-    bool_expr();
-    match(TOKEN_RPAREN);
-    stmt();
-    if(lookahead.type == TOKEN_ELSE){
-        match(TOKEN_ELSE);
-        stmt();
-    }else{
-        print_indent();
-        printf("if_stmt -> no else\n");
-    }
-    trace_exit("if_stmt");
-}
-//TODO - while_stmt -> while '(' bool ')' stmt
+
+// TODO - while_stmt -> while '(' bool ')' stmt
 static void while_stmt(void) {
-    trace_enter("while_stmt");
+    current_depth++;
+    replace_nonterminal("stmt", "while ( bool ) stmt");
+    
     match(TOKEN_WHILE);
     match(TOKEN_LPAREN);
+    
     bool_expr();
+    
     match(TOKEN_RPAREN);
+    
+    // 继续解析 while 循环体
     stmt();
-    trace_exit("while_stmt");
+    
+    current_depth--;
 }
-//TODO - do_while_stmt -> do stmt while '(' bool ')' ;
-static void do_while_stmt(void){
-    trace_enter("do_while_stmt");
+
+// TODO - if_stmt -> if '(' bool ')' stmt [ else stmt ]
+static void if_stmt(void) {
+    current_depth++;
+    replace_nonterminal("stmt", "if ( bool ) stmt");
+    
+    match(TOKEN_IF);
+    match(TOKEN_LPAREN);
+    
+    bool_expr();
+    
+    match(TOKEN_RPAREN);
+    
+    if (lookahead.type == TOKEN_ELSE) {
+        // 更新推导式
+        char* pos = strstr(current_derivation, "stmt");
+        if (pos) {
+            char temp[MAX_STEP_LEN];
+            strncpy(temp, current_derivation, pos - current_derivation);
+            temp[pos - current_derivation] = '\0';
+            strcat(temp, "stmt else stmt");
+            strcat(temp, pos + 4);
+            strcpy(current_derivation, temp);
+            save_step();
+        }
+        
+        stmt();
+        match(TOKEN_ELSE);
+        stmt();
+    } else {
+        stmt();
+    }
+    
+    current_depth--;
+}
+
+// TODO - do_while_stmt -> do stmt while '(' bool ')' ;
+static void do_while_stmt(void) {
+    current_depth++;
+    replace_nonterminal("stmt", "do stmt while ( bool ) ;");
+    
     match(TOKEN_DO);
     stmt();
     match(TOKEN_WHILE);
@@ -229,149 +329,262 @@ static void do_while_stmt(void){
     bool_expr();
     match(TOKEN_RPAREN);
     match(TOKEN_SEMICOLON);
-    trace_exit("do_while_stmt");
+    
+    current_depth--;
 }
-//TODO - break_stmt -> break ;
-static void break_stmt(void){
-    trace_enter("break_stmt");
+
+// TODO - break_stmt -> break ;
+static void break_stmt(void) {
+    current_depth++;
+    replace_nonterminal("stmt", "break ;");
+    
     match(TOKEN_BREAK);
     match(TOKEN_SEMICOLON);
-    trace_exit("break_stmt");
+    
+    current_depth--;
 }
-//TODO - expr  -> term expr'
+
+// 表达式处理函数
 static void expr(void) {
-    trace_enter("expr");
+    current_depth++;
+    replace_nonterminal("expr", "term expr'");
+    
     term();
     expr_prime();
-    trace_exit("expr");
-}
-//TODO - expr' -> '+' term expr' | '-' term expr' | ε
-static void expr_prime(void){
-    trace_enter("expr_prime");
-    if(lookahead.type == TOKEN_PLUS||lookahead.type == TOKEN_MINUS){
-        while(lookahead.type == TOKEN_PLUS || lookahead.type == TOKEN_MINUS){
-        if(lookahead.type == TOKEN_PLUS){
-            match(TOKEN_PLUS);
-            term();
-        }else if(lookahead.type == TOKEN_MINUS){
-            match(TOKEN_MINUS);
-            term();
+    
+    // 清理 expr'
+    char* pos = strstr(current_derivation, "expr'");
+    if (pos && strncmp(pos, "expr'", 5) == 0) {
+        // 检查 expr' 前面是否有空格
+        char* check_pos = pos - 1;
+        if (check_pos >= current_derivation && *check_pos == ' ') {
+            // 删除空格和 expr'
+            char temp[MAX_STEP_LEN];
+            strncpy(temp, current_derivation, check_pos - current_derivation);
+            temp[check_pos - current_derivation] = '\0';
+            strcat(temp, pos + 5);
+            strcpy(current_derivation, temp);
+            save_step();
+        } else {
+            // 只删除 expr'
+            char temp[MAX_STEP_LEN];
+            strncpy(temp, current_derivation, pos - current_derivation);
+            temp[pos - current_derivation] = '\0';
+            strcat(temp, pos + 5);
+            strcpy(current_derivation, temp);
+            save_step();
         }
     }
-    }else{
-        print_indent();
-        printf("expr -> epsilon\n");
-    }
-    trace_exit("expr");
     
+    current_depth--;
 }
-//TODO - term -> factor term'
-static void term(void){
-    trace_enter("term");
+
+static void expr_prime(void) {
+    if (lookahead.type == TOKEN_PLUS) {
+        current_depth++;
+        replace_nonterminal("expr'", "+ term expr'");
+        
+        match(TOKEN_PLUS);
+        term();
+        expr_prime();
+        current_depth--;
+    } else if (lookahead.type == TOKEN_MINUS) {
+        current_depth++;
+        replace_nonterminal("expr'", "- term expr'");
+        
+        match(TOKEN_MINUS);
+        term();
+        expr_prime();
+        current_depth--;
+    }
+    // ε 产生式：不显示
+}
+
+static void term(void) {
+    current_depth++;
+    replace_nonterminal("term", "factor term'");
+    
     factor();
     term_prime();
-    trace_exit("term");
-}
-//TODO - term' -> '*' factor term' | '/' factor term' | ε
-static void term_prime(void) {
-    trace_enter("term_prime");
-    if (lookahead.type == TOKEN_MULTIPLY || lookahead.type == TOKEN_DIVIDE) {
-        while (lookahead.type == TOKEN_MULTIPLY || lookahead.type == TOKEN_DIVIDE) {
-            if (lookahead.type == TOKEN_MULTIPLY) {
-                match(TOKEN_MULTIPLY);
-                factor();
-            } else {
-                match(TOKEN_DIVIDE);
-                factor();
-            }
+    
+    // 清理 term'
+    char* pos = strstr(current_derivation, "term'");
+    if (pos && strncmp(pos, "term'", 5) == 0) {
+        // 检查 term' 前面是否有空格
+        char* check_pos = pos - 1;
+        if (check_pos >= current_derivation && *check_pos == ' ') {
+            // 删除空格和 term'
+            char temp[MAX_STEP_LEN];
+            strncpy(temp, current_derivation, check_pos - current_derivation);
+            temp[check_pos - current_derivation] = '\0';
+            strcat(temp, pos + 5);
+            strcpy(current_derivation, temp);
+            save_step();
+        } else {
+            // 只删除 term'
+            char temp[MAX_STEP_LEN];
+            strncpy(temp, current_derivation, pos - current_derivation);
+            temp[pos - current_derivation] = '\0';
+            strcat(temp, pos + 5);
+            strcpy(current_derivation, temp);
+            save_step();
         }
-    } else {
-        print_indent(); printf("term_prime -> epsilon\n");
     }
-    trace_exit("term_prime");
+    
+    current_depth--;
 }
-//TODO - factor -> '(' expr ')' | id | num
+
+static void term_prime(void) {
+    if (lookahead.type == TOKEN_MULTIPLY) {
+        current_depth++;
+        replace_nonterminal("term'", "* factor term'");
+        
+        match(TOKEN_MULTIPLY);
+        factor();
+        term_prime();
+        current_depth--;
+    } else if (lookahead.type == TOKEN_DIVIDE) {
+        current_depth++;
+        replace_nonterminal("term'", "/ factor term'");
+        
+        match(TOKEN_DIVIDE);
+        factor();
+        term_prime();
+        current_depth--;
+    }
+    // ε 产生式：不显示
+}
+
 static void factor(void) {
-    trace_enter("factor");
+    current_depth++;
+    
     if (lookahead.type == TOKEN_LPAREN) {
+        replace_nonterminal("factor", "( expr )");
         match(TOKEN_LPAREN);
         expr();
         match(TOKEN_RPAREN);
     } else if (lookahead.type == TOKEN_IDENTIFIER) {
-        trace_token("factor -> id", lookahead);
-        match(TOKEN_IDENTIFIER);
-    } else if (is_number_token(lookahead.type)) {
-        trace_token("factor -> number", lookahead);
-        advance_token();
+        replace_nonterminal("factor", "id");
+        match_and_replace(TOKEN_IDENTIFIER, "id");
+    } else if (lookahead.type == TOKEN_INTEGER) {
+        replace_nonterminal("factor", "num");
+        match_and_replace(TOKEN_INTEGER, "num");
     } else {
-        print_indent();
         fprintf(stderr, "Syntax error: expected factor at line %d, found %s ('%s')\n",
                 lookahead.line, token_type_to_str(lookahead.type), lookahead.lexeme);
         parse_error = true;
-        TokenType syncset[] = { TOKEN_PLUS, TOKEN_MINUS, TOKEN_MULTIPLY, TOKEN_DIVIDE,
-                                TOKEN_SEMICOLON, TOKEN_RPAREN, TOKEN_RBRACE, TOKEN_EOF };
-        sync_on(syncset, sizeof(syncset)/sizeof(syncset[0]));
-        if (lookahead.type != TOKEN_EOF) advance_token();
     }
-    trace_exit("factor");
+    
+    current_depth--;
 }
 
-//TODO - bool -> expr bool_rest
 static void bool_expr(void) {
-    trace_enter("bool_expr");
+    current_depth++;
+    replace_nonterminal("bool", "expr bool_rest");
+    
     expr();
     bool_rest();
-    trace_exit("bool_expr");
-}
-//TODO - bool_rest -> < expr | <= expr | > expr | >= expr | == expr | != expr | ε
-static void bool_rest(void) {
-    trace_enter("bool_rest");
-    if (lookahead.type == TOKEN_LT) {
-        match(TOKEN_LT); expr();
-    } else if (lookahead.type == TOKEN_LE) {
-        match(TOKEN_LE); expr();
-    } else if (lookahead.type == TOKEN_GT) {
-        match(TOKEN_GT); expr();
-    } else if (lookahead.type == TOKEN_GE) {
-        match(TOKEN_GE); expr();
-    } else if (lookahead.type == TOKEN_EQ) {
-        match(TOKEN_EQ); expr();
-    } else if (lookahead.type == TOKEN_NE) {
-        match(TOKEN_NE); expr();
-    } else {
-        print_indent(); printf("bool_rest -> epsilon\n");
-    }
-    trace_exit("bool_rest");
+    
+    current_depth--;
 }
 
-//NOTE - 对外解析函数
-int parse_file(const char* filename){
+static void bool_rest(void) {
+    if (lookahead.type == TOKEN_LT) {
+        current_depth++;
+        replace_nonterminal("bool_rest", "< expr");
+        match(TOKEN_LT);
+        expr();
+        current_depth--;
+    } else if (lookahead.type == TOKEN_LE) {
+        current_depth++;
+        replace_nonterminal("bool_rest", "<= expr");
+        match(TOKEN_LE);
+        expr();
+        current_depth--;
+    } else if (lookahead.type == TOKEN_GT) {
+        current_depth++;
+        replace_nonterminal("bool_rest", "> expr");
+        match(TOKEN_GT);
+        expr();
+        current_depth--;
+    } else if (lookahead.type == TOKEN_GE) {
+        current_depth++;
+        replace_nonterminal("bool_rest", ">= expr");
+        match(TOKEN_GE);
+        expr();
+        current_depth--;
+    } else if (lookahead.type == TOKEN_EQ) {
+        current_depth++;
+        replace_nonterminal("bool_rest", "== expr");
+        match(TOKEN_EQ);
+        expr();
+        current_depth--;
+    } else if (lookahead.type == TOKEN_NE) {
+        current_depth++;
+        replace_nonterminal("bool_rest", "!= expr");
+        match(TOKEN_NE);
+        expr();
+        current_depth--;
+    } else {
+        // ε 产生式：删除 bool_rest
+        char* pos = strstr(current_derivation, "bool_rest");
+        if (pos) {
+            char temp[MAX_STEP_LEN];
+            strncpy(temp, current_derivation, pos - current_derivation);
+            temp[pos - current_derivation] = '\0';
+            strcat(temp, pos + 9); // 9是"bool_rest"的长度
+            strcpy(current_derivation, temp);
+            save_step();
+        }
+    }
+}
+
+// 打印所有步骤
+static void print_all_steps(void) {
+    printf("Derivation steps:\n");
+    for (int i = 0; i < step_count; i++) {
+        printf("%3d: %s\n", i + 1, steps[i]);
+    }
+    printf("\n");
+}
+
+// NOTE - 对外解析函数
+int parse_file(const char* filename) {
     parse_error = false;
-    indent_level = 0;
-    if(lexer){
+    step_count = 0;
+    current_depth = 0;
+    strcpy(current_derivation, "program");
+    
+    if (lexer) {
         free_lexer(lexer);
         lexer = NULL;
     }
+    
     lexer = init_lexer(filename);
-    if(!lexer){
+    if (!lexer) {
         fprintf(stderr, "Failed to open source file: %s\n", filename);
         return 1;
     }
-    //读入第一个token
+    
+    // 读入第一个token
     advance_token();
     // 开始解析
     program();
-
-    if(lookahead.type != TOKEN_EOF){
+    
+    if (lookahead.type != TOKEN_EOF) {
         while (lookahead.type != TOKEN_EOF) advance_token();
     }
-
+    
     free_lexer(lexer);
     lexer = NULL;
-    if(parse_error){
+    
+    // 打印所有推导步骤
+    print_all_steps();
+    
+    if (parse_error) {
         fprintf(stderr, "Parsing finished: syntax errors detected.\n");
         return 2;
-    }else{
+    } else {
         printf("Parsing finished: no syntax errors detected.\n");
         return 0;
     }
