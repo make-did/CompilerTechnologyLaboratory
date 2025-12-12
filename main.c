@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-// 显示带行号的源程序（功能要求4）
+// 显示带行号的源程序
 void print_source_with_line_numbers(const char* filename) {
     FILE* file = fopen(filename, "r");
     if (!file) {
@@ -132,7 +132,7 @@ void print_binary_form_per_line(const char* filename) {
     free_lexer(lexer);
 }
 
-// 打印错误摘要（功能要求5）
+// 打印错误摘要
 void print_error_summary(Lexer* lexer) {
     if (!lexer) return;
     

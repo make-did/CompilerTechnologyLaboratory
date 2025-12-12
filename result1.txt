@@ -1,0 +1,68 @@
+========== Lexical Analyzer ==========
+File: test1.c
+
+=== Source Code with Line Numbers ===
+   1: /* This is a test program for lexical analyzer */
+   2: // Single line comment
+   3: main() {
+   4:     /* This is a test program for lexical analyzer */
+   5:     int x=1,y=2;
+   6:     int z = x + y;int b=1;
+   7:     // Single line comment
+   8:     int count = 0;
+   9:     float price = 99.99;
+  10:     char letter = 'A';
+  11:     char* message = "Hello \\World!";
+  12:     int a[] = {0};
+  13:     if(a[1]||(count&&1)){
+  14:         a[1] = 1;
+  15:     }
+  16:     double m = 123L;
+  17:     int l = 0x123L;
+  18:     !
+  19:     &
+  20:     |  @  #
+  21:     int a=a && b;
+  22: }
+
+=== Binary Forms (Token Type, Value) per Line ===
+Line | Binary Forms
+-----|-----------------------------------------------------
+Error at line 18: Invalid operator '!'
+Error at line 19: Invalid operator '&'
+Error at line 20: Invalid operator '|'
+Error at line 20, column 8: Invalid character '@'
+Error at line 20, column 11: Invalid character '#'
+   3 | (MAIN, main) (LPAREN, () (RPAREN, )) (LBRACE, {)
+   5 | (INT, int) (IDENTIFIER, x) (ASSIGN, =) (INTEGER, 1) (COMMA, ,) (IDENTIFIER, y) (ASSIGN, =) (INTEGER, 2) (SEMICOLON, ;) 
+   6 | (INT, int) (IDENTIFIER, z) (ASSIGN, =) (IDENTIFIER, x) (PLUS, +) (IDENTIFIER, y) (SEMICOLON, ;) (INT, int) (IDENTIFIER, b) (ASSIGN, =) (INTEGER, 1) (SEMICOLON, ;)
+   8 | (INT, int) (IDENTIFIER, count) (ASSIGN, =) (INTEGER, 0) (SEMICOLON, ;)
+   9 | (FLOAT, float) (IDENTIFIER, price) (ASSIGN, =) (FLOAT_NUM, 99.99) (SEMICOLON, ;)
+  10 | (CHAR, char) (IDENTIFIER, letter) (ASSIGN, =) (CHAR_CONST, 'A') (SEMICOLON, ;)
+  11 | (CHAR, char) (MULTIPLY, *) (IDENTIFIER, message) (ASSIGN, =) (STRING_CONST, "Hello \\World!") (SEMICOLON, ;) 
+  12 | (INT, int) (IDENTIFIER, a) (LBRACKET, [) (RBRACKET, ]) (ASSIGN, =) (LBRACE, {) (INTEGER, 0) (RBRACE, }) (SEMICOLON, ;)
+  13 | (IF, if) (LPAREN, () (IDENTIFIER, a) (LBRACKET, [) (INTEGER, 1) (RBRACKET, ]) (OR, ||) (LPAREN, () (IDENTIFIER, count) (AND, &&) (INTEGER, 1) (RPAREN, )) (RPAREN, )) (LBRACE, {)
+  14 | (IDENTIFIER, a) (LBRACKET, [) (INTEGER, 1) (RBRACKET, ]) (ASSIGN, =) (INTEGER, 1) (SEMICOLON, ;) 
+  15 | (RBRACE, })
+  16 | (DOUBLE, double) (IDENTIFIER, m) (ASSIGN, =) (INTEGER, 123L) (SEMICOLON, ;)
+  17 | (INT, int) (IDENTIFIER, l) (ASSIGN, =) (HEX, 0x123L) (SEMICOLON, ;)
+  18 | (ERROR, !)
+  19 | (ERROR, &)
+  20 | (ERROR, |) (ERROR, @) (ERROR, #)
+  21 | (INT, int) (IDENTIFIER, a) (ASSIGN, =) (IDENTIFIER, a) (AND, &&) (IDENTIFIER, b) (SEMICOLON, ;)
+  22 | (RBRACE, })
+
+Total tokens: 100
+Total errors: 5
+
+Error at line 18: Invalid operator '!'
+Error at line 19: Invalid operator '&'
+Error at line 20: Invalid operator '|'
+Error at line 20, column 8: Invalid character '@'
+Error at line 20, column 11: Invalid character '#'
+=== Error Summary ===
+Total errors: 5
+Errors by line:
+  Line 18: 1 error(s)
+  Line 19: 1 error(s)
+  Line 20: 3 error(s)

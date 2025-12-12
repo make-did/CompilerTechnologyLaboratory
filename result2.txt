@@ -1,0 +1,69 @@
+测试代码:
+{
+    i = 2;
+    while (i <= 100)
+    {
+        sum = sum + i;
+        i = i + 2 + 3;
+    }
+}
+
+运行结果:
+Derivation steps:
+  1: program
+  2: ==> block
+  3: ==> { stmts }
+  4: ==> { stmt stmts }
+  5: ==> { id = expr ; stmts }
+  6: ==> { id = term expr' ; stmts }
+  7: ==> { id = factor term' expr' ; stmts }
+  8: ==> { id = num term' expr' ; stmts }
+  9: ==> { id = num  expr' ; stmts }
+ 10: ==> { id = num   ; stmts }
+ 11: ==> { id = num   ; stmt stmts }
+ 12: ==> { id = num   ; while ( bool ) stmt stmts }
+ 13: ==> { id = num   ; while ( expr bool_rest ) stmt stmts }
+ 14: ==> { id = num   ; while ( term expr' bool_rest ) stmt stmts }
+ 15: ==> { id = num   ; while ( factor term' expr' bool_rest ) stmt stmts }
+ 16: ==> { id = num   ; while ( id term' expr' bool_rest ) stmt stmts }
+ 17: ==> { id = num   ; while ( id  expr' bool_rest ) stmt stmts }
+ 18: ==> { id = num   ; while ( id   bool_rest ) stmt stmts }
+ 19: ==> { id = num   ; while ( id   <= expr ) stmt stmts }
+ 20: ==> { id = num   ; while ( id   <= term expr' ) stmt stmts }
+ 21: ==> { id = num   ; while ( id   <= factor term' expr' ) stmt stmts }
+ 22: ==> { id = num   ; while ( id   <= num term' expr' ) stmt stmts }
+ 23: ==> { id = num   ; while ( id   <= num  expr' ) stmt stmts }
+ 24: ==> { id = num   ; while ( id   <= num   ) stmt stmts }
+ 25: ==> { id = num   ; while ( id   <= num   ) block stmts }
+ 26: ==> { id = num   ; while ( id   <= num   ) { stmts } stmts }
+ 27: ==> { id = num   ; while ( id   <= num   ) { stmt stmts } stmts }
+ 28: ==> { id = num   ; while ( id   <= num   ) { id = expr ; stmts } stmts }
+ 29: ==> { id = num   ; while ( id   <= num   ) { id = term expr' ; stmts } stmts }
+ 30: ==> { id = num   ; while ( id   <= num   ) { id = factor term' expr' ; stmts } stmts }
+ 31: ==> { id = num   ; while ( id   <= num   ) { id = id term' expr' ; stmts } stmts }
+ 32: ==> { id = num   ; while ( id   <= num   ) { id = id  expr' ; stmts } stmts }
+ 33: ==> { id = num   ; while ( id   <= num   ) { id = id  + term expr' ; stmts } stmts }
+ 34: ==> { id = num   ; while ( id   <= num   ) { id = id  + factor term' expr' ; stmts } stmts }
+ 35: ==> { id = num   ; while ( id   <= num   ) { id = id  + id term' expr' ; stmts } stmts }
+ 36: ==> { id = num   ; while ( id   <= num   ) { id = id  + id  expr' ; stmts } stmts }
+ 37: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; stmts } stmts }
+ 38: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; stmt stmts } stmts }
+ 39: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = expr ; stmts } stmts }
+ 40: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = term expr' ; stmts } stmts }
+ 41: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = factor term' expr' ; stmts } stmts }
+ 42: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id term' expr' ; stmts } stmts }
+ 43: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id  expr' ; stmts } stmts }
+ 44: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id  + term expr' ; stmts } stmts }
+ 45: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id  + factor term' expr' ; stmts } stmts }
+ 46: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id  + num term' expr' ; stmts } stmts }
+ 47: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id  + num  expr' ; stmts } stmts }
+ 48: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id  + num  + term expr' ; stmts } stmts }
+ 49: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id  + num  + factor term' expr' ; stmts } stmts }
+ 50: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id  + num  + num term' expr' ; stmts } stmts }
+ 51: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id  + num  + num  expr' ; stmts } stmts }
+ 52: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id  + num  + num   ; stmts } stmts }
+ 53: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id  + num  + num   ;  } stmts }
+ 54: ==> { id = num   ; while ( id   <= num   ) { id = id  + id   ; id = id  + num  + num   ;  }  }
+
+Parsing finished: no syntax errors detected.
+Success: source 'test2.c' parsed OK.
