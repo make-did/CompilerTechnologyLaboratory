@@ -440,6 +440,7 @@ static void bool_rest(void) {
 // 打印所有步骤
 static void print_all_steps(void) {
     printf("Derivation steps:\n");
+    
     for (int i = 0; i < step_count; i++) {
         if(i==0)
         printf("%3d: %s\n", i + 1, steps[i]);
